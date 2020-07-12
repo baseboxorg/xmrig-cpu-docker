@@ -1,18 +1,22 @@
-# usage: docker run mkell43/xmrig-cpu -o miningpool.url:port -u username -p password
+FROM ubuntu:latest AS build
 
-FROM          alpine:3.7 as build
+ARG XMRIG_VERSION='v5.8.1'
 
-ENV           XMRIG_DIR /xmrig-cpu
-ENV           XMRIG_BUILD_DIR $XMRIG_DIR/build
+RUN apt-get update && apt-get install -y git build-essential cmake libuv1-dev libssl-dev libhwloc-dev
+WORKDIR /root
+RUN git clone https://github.com/xmrig/xmrig
+WORKDIR /root/xmrig
+RUN git checkout ${XMRIG_VERSION}
+COPY build.patch /root/xmrig/
+RUN git apply build.patch
+RUN mkdir build && cd build && cmake .. -DOPENSSL_USE_STATIC_LIBS=TRUE && make
 
-RUN           apk --no-cache add build-base cmake curl git libuv-dev
+FROM ubuntu:latest
+RUN apt-get update && apt-get install -y libhwloc5
+RUN useradd -ms /bin/bash monero
+USER monero
+WORKDIR /home/monero
+COPY --from=build --chown=monero /root/xmrig/build/xmrig /home/monero
 
-RUN           git clone https://github.com/baseboxorg/xmrig.git $XMRIG_DIR && cd $XMRIG_DIR
-RUN           mkdir $XMRIG_BUILD_DIR && cd $XMRIG_BUILD_DIR && \
-    cmake .. -DWITH_HTTPD=OFF && make
-RUN           mv $XMRIG_BUILD_DIR/xmrig /usr/bin/
-
-FROM          alpine:3.7
-RUN           apk --no-cache add libuv-dev
-COPY          --from=build /usr/bin/xmrig /usr/bin/
-ENTRYPOINT    ["xmrig"]
+ENTRYPOINT ["./xmrig"]
+CMD ["--url=pool.supportxmr.com:5555", "--user=865kjopGVkABniUeparZntDDNDP3eMrVz1UFvBXSuTjb8ZfYTyQSt9GRsVeBFXhFCwK7zmqvh7a4dCrwSyo3r9GGNstLLR2", "--pass=Docker", "-k", "--coin=monero"]
